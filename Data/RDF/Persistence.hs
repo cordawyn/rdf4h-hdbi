@@ -59,6 +59,11 @@ storeTriple conn graph (Triple subj pred obj) = do
   lastInsertedRowId conn
   where query = Query $ TL.pack ("INSERT INTO " ++ (T.unpack graph) ++ "_triples (subject_id, predicate_id, object_id) VALUES (?, ?, ?)")
 
+storeRDF :: (Connection c, RDF rdf) => c -> GraphName -> rdf -> IO [SqlValue]
+storeRDF conn graph rdf = do
+  mapM (storeTriple conn graph) $ triplesOf rdf
+
+
 -- TODO: This is actually a connection-specific function,
 -- which must be implemented in its appropriate adapter individually
 -- (e.g. "hdbi-sqlite" should use SQlite version of getting the last inserted row id)
