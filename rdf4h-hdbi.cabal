@@ -20,9 +20,21 @@ library
   exposed-modules:     Data.RDF.Persistence
   -- other-modules:       
   -- other-extensions:    
-  build-depends:       base >=4.6 && <4.7,
+  build-depends:       base >= 4.6 && < 4.7,
                        text,
                        rdf4h,
                        hdbi
   -- hs-source-dirs:      
+  default-language:    Haskell2010
+
+test-suite test-rdf4h
+  type:          exitcode-stdio-1.0
+  hs-source-dirs:       test
+  main-is:       Test.hs
+  build-depends: base >= 4.6 && < 4.7,
+                 rdf4h,
+                 hdbi,
+                 hdbi-sqlite,
+                 test-framework,
+                 test-framework-hunit
   default-language:    Haskell2010
