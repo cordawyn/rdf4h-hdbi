@@ -1,0 +1,15 @@
+*~
+.*~
+dist
+*.o
+*.hi
+*.chi
+*.chs.h
+TAGS
+*_flymake.hs
+*.dc
+*#
+*.backup
+
+/.cabal-sandbox
+cabal.sandbox.config
