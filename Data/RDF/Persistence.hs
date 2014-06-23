@@ -33,22 +33,28 @@ createStorage conn graph = do
   run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_triples` (id INTEGER PRIMARY KEY NOT NULL, subject_id INTEGER, predicate_id INTEGER, object_id INTEGER)") ()
   run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_nodes` (id INTEGER PRIMARY KEY NOT NULL, type STRING, text STRING, tag STRING)") ()
 
--- Convert a node to a partial SQL syntax that can be used in "INSERT INTO ..." statements.
--- TODO: SQL-escape the text from the nodes (use "toSql"?).
-nodeToSQL :: Node -> TL.Text
-nodeToSQL (UNode n) = TL.pack $ "(type, text) VALUES ('UNode', '" ++ (T.unpack n) ++ "')"
-nodeToSQL (LNode n) = case n of
-                        PlainL tx -> TL.pack $ "(type, text) VALUES ('PlainL', '" ++ (T.unpack tx) ++ "')"
-                        PlainLL tx ln -> TL.pack $ "(type, text, tag) VALUES ('PlainLL', '" ++ (T.unpack tx) ++ "', '" ++ (T.unpack ln) ++ "')"
-                        TypedL tx tp -> TL.pack $ "(type, text, tag) VALUE ('TypedL', '" ++ (T.unpack tx) ++ "', '" ++ (T.unpack tp) ++ "')"
-nodeToSQL (BNode n) = TL.pack $ "(type, text) VALUES ('BNode', '" ++ (T.unpack n) ++ "')"
-nodeToSQL (BNodeGen n) = TL.pack $ "(type, text) VALUES ('BNode', '" ++ (show n) ++ "')"
+nodeToSqlValues :: Node -> [(T.Text, SqlValue)]
+nodeToSqlValues (UNode uri)  = [("type", SqlText "UNode"), ("text", toSql uri)]
+nodeToSqlValues (LNode v)    = case v of
+                                 PlainL tx -> [("type", SqlText "PlainL"), ("text", toSql tx)]
+                                 PlainLL tx ln -> [("type", SqlText "PlainLL"), ("text", toSql tx), ("tag", toSql ln)]
+                                 TypedL tx tp -> [("type", SqlText "TypedL"), ("text", toSql tx), ("tag", toSql tp)]
+nodeToSqlValues (BNode nid)  = [("type", SqlText "BNode"), ("text", toSql nid)]
+nodeToSqlValues (BNodeGen nid) = [("type", SqlText "BNodeGen"), ("text", toSql $ show nid)]
 
 storeNode :: Connection c => c -> GraphName -> Node -> IO SqlValue
 storeNode conn graph n = do
-  run conn query ()
+  runQuery $ (unzip . nodeToSqlValues) n
   lastInsertedRowId conn
-  where query = Query $ TL.concat [TL.pack ("INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` "), (nodeToSQL n)]
+  where runQuery (cols, vals) = run conn query vals
+            where query = (Query . TL.pack . T.unpack) $ T.concat [
+                           "INSERT INTO `",
+                           graph,
+                           "_nodes` (",
+                           (T.intercalate ", " cols),
+                           ") VALUES (",
+                           (T.intercalate ", " $ replicate (length cols) "?"),
+                           ")" ]
 
 storeTriple :: Connection c => c -> GraphName -> Triple -> IO SqlValue
 storeTriple conn graph (Triple subj pred obj) = do
