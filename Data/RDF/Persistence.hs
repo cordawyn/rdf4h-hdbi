@@ -55,7 +55,7 @@ storeTriple conn graph (Triple subj pred obj) = do
   subjId <- storeNode conn graph subj
   predId <- storeNode conn graph pred
   objId  <- storeNode conn graph obj
-  runMany conn query [subjId, predId, objId]
+  run conn query [subjId, predId, objId]
   lastInsertedRowId conn
   where query = Query $ TL.pack ("INSERT INTO " ++ (T.unpack graph) ++ "_triples (subject_id, predicate_id, object_id) VALUES (?, ?, ?)")
 
