@@ -15,13 +15,15 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Sequence as S
 import qualified Data.Foldable as F
+import qualified Data.Map as Map
 
 tests :: [Test]
 tests = [ testGroup "Persistence tests" allTests ]
 
 allTests :: [Test]
 allTests = [ buildTest storeNodeTest,
-             buildTest storeTripleTest ]
+             buildTest storeTripleTest,
+             buildTest storeRDFTest ]
 
 testDatabase = "test/test.sqlite"
 
@@ -62,6 +64,24 @@ storeTripleTest = do
         q2 = Query $ TL.pack $ "SELECT * FROM " ++ (T.unpack graph) ++ "_nodes WHERE id IN (?, ?, ?)"
         expectedResult = [SqlInteger 1, SqlInteger 2, SqlInteger 3]
         assertion r = HU.assert $ expectedResult == r
+
+storeRDFTest :: IO Test
+storeRDFTest = do
+  conn <- connectSqlite3 testDatabase
+  initStorage conn graph
+  isRDFStored <- storeRDF conn graph rdf
+  triplesStored <- runFetchAll conn q1 () :: IO (S.Seq [SqlValue])
+  return $ testCase "storeRDF test" $ assertion [isRDFStored, (F.concatMap (\x -> [tail x]) triplesStored) == [t1, t2]]
+  where graph = "store_rdf_test"
+        rdf = mkRdf trps bUrl pms :: TriplesGraph
+        trps = [ triple (unode "http://example.org/rdf/4") (unode "http://example.org/rdf/5") (unode "http://example.org/rdf/6"),
+                 triple (unode "http://example.org/rdf/6") (unode "http://example.org/rdf/7") (lnode $ plainLL "test" "en") ]
+        bUrl = Just $ BaseUrl "http://example.org/rdf/"
+        pms = PrefixMappings Map.empty
+        t1 = [SqlInteger 1, SqlInteger 2, SqlInteger 3]
+        t2 = [SqlInteger 4, SqlInteger 5, SqlInteger 6]
+        q1 = Query $ TL.pack $ "SELECT * FROM " ++ (T.unpack graph) ++ "_triples"
+        assertion conds = HU.assert $ all (\x -> x == True) conds
 
 -- AUXILIARY
 

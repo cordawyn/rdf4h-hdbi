@@ -59,9 +59,10 @@ storeTriple conn graph (Triple subj pred obj) = do
   lastInsertedRowId conn
   where query = Query $ TL.pack ("INSERT INTO " ++ (T.unpack graph) ++ "_triples (subject_id, predicate_id, object_id) VALUES (?, ?, ?)")
 
-storeRDF :: (Connection c, RDF rdf) => c -> GraphName -> rdf -> IO [SqlValue]
+storeRDF :: (Connection c, RDF rdf) => c -> GraphName -> rdf -> IO Bool
 storeRDF conn graph rdf = do
-  mapM (storeTriple conn graph) $ triplesOf rdf
+  xs <- mapM (storeTriple conn graph) $ triplesOf rdf
+  return $ all (\x -> x /= SqlInteger 0) xs
 
 
 -- TODO: This is actually a connection-specific function,
