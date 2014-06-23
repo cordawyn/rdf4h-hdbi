@@ -13,22 +13,26 @@ import Database.HDBI
 import Database.HDBI.SQlite
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
+import qualified Data.Sequence as S
+import qualified Data.Foldable as F
 
 tests :: [Test]
 tests = [ testGroup "Persistence tests" allTests ]
 
 allTests :: [Test]
-allTests = [ buildTest storeNodeTest ]
+allTests = [ buildTest storeNodeTest,
+             buildTest storeTripleTest ]
 
+testDatabase = "test/test.sqlite"
 
 -- TESTS
 
 storeNodeTest :: IO Test
 storeNodeTest = do
-  conn <- connectSqlite3 "test/test.sqlite"
+  conn <- connectSqlite3 testDatabase
   initStorage conn graph
   storeNode conn graph node
-  row <- runFetch conn query () :: IO (Maybe [SqlValue])
+  row <- runFetch conn query ()
   disconnect conn
   return $ testCase "storeNode test" $ assertion row
   where graph = "store_node_test"
@@ -38,6 +42,26 @@ storeNodeTest = do
         assertion (Just r) = HU.assert $ expectedResult == r
         assertion Nothing = HU.assert False
 
+storeTripleTest :: IO Test
+storeTripleTest = do
+  conn <- connectSqlite3 testDatabase
+  initStorage conn graph
+  storeTriple conn graph trp
+  ts <- runFetch conn q1 () :: IO (Maybe [SqlValue])
+  case ts of
+    Just r -> do
+            r2 <- runFetchAll conn q2 $ tail r :: IO (S.Seq [SqlValue])
+            disconnect conn
+            return $ testCase "storeTriple test" $ assertion $ F.concatMap (\x -> [head x]) r2
+    Nothing -> do
+            disconnect conn
+            return $ testCase "storeTriple test" $ HU.assert False
+  where graph = "store_triple_test"
+        trp = triple (unode "http://example.org/rdf/2") (unode "http://example.org/rdf/3") (lnode $ plainL "test")
+        q1 = Query $ TL.pack $ "SELECT * FROM " ++ (T.unpack graph) ++ "_triples"
+        q2 = Query $ TL.pack $ "SELECT * FROM " ++ (T.unpack graph) ++ "_nodes WHERE id IN (?, ?, ?)"
+        expectedResult = [SqlInteger 1, SqlInteger 2, SqlInteger 3]
+        assertion r = HU.assert $ expectedResult == r
 
 -- AUXILIARY
 

@@ -27,12 +27,13 @@ library
   -- hs-source-dirs:      
   default-language:    Haskell2010
 
-test-suite test-rdf4h
+test-suite test-rdf4h-hdbi
   type:          exitcode-stdio-1.0
   hs-source-dirs:       test
   main-is:       Test.hs
   build-depends: base >= 4.6 && < 4.7,
                  text,
+                 containers,
                  rdf4h,
                  rdf4h-hdbi,
                  hdbi,
