@@ -22,6 +22,7 @@ library
   -- other-extensions:    
   build-depends:       base >= 4.6 && < 4.7,
                        text,
+                       containers,
                        rdf4h,
                        hdbi
   -- hs-source-dirs:      

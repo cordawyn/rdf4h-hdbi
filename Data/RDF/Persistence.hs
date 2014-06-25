@@ -4,6 +4,9 @@
 -- Wrap all SQL queries into transactions, make sure lastInsertedRowId is valid!
 -- Implement complete RDF->SQL and SQL->RDF serializing.
 -- Unique (row/node) constraints?
+-- Maybe use unique constraints to handle cases of *updating* RDF stored in the DB?
+-- Use a flexible method to load nodes or triples instead of looking up them by ID
+--   (e.g. replace SqlValue (ID) with [(columnName, value)] argument)?
 
 module Data.RDF.Persistence where
 
@@ -11,6 +14,11 @@ import Data.RDF
 import Database.HDBI
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
+import qualified Data.Foldable as F (concatMap)
+import Data.Functor ((<$>))
+import Control.Applicative ((<*>), optional)
+import qualified Data.Map as Map
+import Data.Maybe (catMaybes)
 
 type GraphName = T.Text
 
@@ -34,13 +42,13 @@ createStorage conn graph = do
   run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_nodes` (id INTEGER PRIMARY KEY NOT NULL, type STRING, text STRING, tag STRING)") ()
 
 nodeToSqlValues :: Node -> [(T.Text, SqlValue)]
-nodeToSqlValues (UNode uri)  = [("type", SqlText "UNode"), ("text", toSql uri)]
-nodeToSqlValues (LNode v)    = case v of
-                                 PlainL tx -> [("type", SqlText "PlainL"), ("text", toSql tx)]
-                                 PlainLL tx ln -> [("type", SqlText "PlainLL"), ("text", toSql tx), ("tag", toSql ln)]
-                                 TypedL tx tp -> [("type", SqlText "TypedL"), ("text", toSql tx), ("tag", toSql tp)]
-nodeToSqlValues (BNode nid)  = [("type", SqlText "BNode"), ("text", toSql nid)]
+nodeToSqlValues (UNode uri)    = [("type", SqlText "UNode"), ("text", toSql uri)]
+nodeToSqlValues (BNode nid)    = [("type", SqlText "BNode"), ("text", toSql nid)]
 nodeToSqlValues (BNodeGen nid) = [("type", SqlText "BNodeGen"), ("text", toSql $ show nid)]
+nodeToSqlValues (LNode v)      = case v of
+                                   PlainL tx -> [("type", SqlText "PlainL"), ("text", toSql tx)]
+                                   PlainLL tx ln -> [("type", SqlText "PlainLL"), ("text", toSql tx), ("tag", toSql ln)]
+                                   TypedL tx tp -> [("type", SqlText "TypedL"), ("text", toSql tx), ("tag", toSql tp)]
 
 storeNode :: Connection c => c -> GraphName -> Node -> IO SqlValue
 storeNode conn graph n = do
@@ -70,6 +78,57 @@ storeRDF conn graph rdf = do
   xs <- mapM (storeTriple conn graph) $ triplesOf rdf
   return $ all (\x -> x /= SqlInteger 0) xs
 
+-- Load Node from the database by its Id.
+loadNode :: Connection c => c -> GraphName -> SqlValue -> IO (Maybe Node)
+loadNode conn graph nid = do
+  nsql <- runFetch conn query [nid]
+  case nsql of
+    Nothing -> return Nothing
+    Just row  -> return $ Just (sqlValuesToNode row)
+  where query = Query $ TL.pack $ "SELECT * FROM `" ++ (T.unpack graph) ++ "_nodes` WHERE id = ? LIMIT 1"
+
+-- Convert a list of SqlValues (SQL row) into a node.
+-- The first column (id) is ignored.
+-- Raises exceptions on unknown node types or invalid input format.
+sqlValuesToNode :: [SqlValue] -> Node
+sqlValuesToNode [_, ntype, ntext, ntag] =
+    case (fromSql ntype :: T.Text) of
+      "UNode" -> unode $ fromSql ntext
+      "BNode" -> bnode $ fromSql ntext
+      "BNodeGen" -> BNodeGen (read (fromSql ntext) :: Int)
+      "PlainL" -> lnode $ plainL $ fromSql ntext
+      "PlainLL" -> lnode $ plainLL (fromSql ntext) (fromSql ntag)
+      "TypedL" -> lnode $ typedL (fromSql ntext) (fromSql ntag)
+      _ -> error $ "Unknown node type in SQL: " ++ (fromSql ntype)
+sqlValuesToNode _ = error "Invalid SQL format for Node"
+
+loadTriple :: Connection c => c -> GraphName -> SqlValue -> IO (Maybe Triple)
+loadTriple conn graph tid = do
+  tsql <- runFetch conn query [tid]
+  case tsql of
+    Nothing -> return Nothing
+    Just [_, subjId, predId, objId] -> loadTripleByIds conn graph subjId predId objId
+    Just _ -> error "Invalid SQL format for Triple"
+  where query = Query $ TL.pack $ "SELECT * FROM `" ++ (T.unpack graph) ++ "_triples` WHERE id = ? LIMIT 1"
+
+loadTripleByIds :: Connection c => c -> GraphName -> SqlValue -> SqlValue -> SqlValue -> IO (Maybe Triple)
+loadTripleByIds conn graph subjId predId objId = do
+    newTriple <$> loadNode conn graph subjId <*> loadNode conn graph predId <*> loadNode conn graph objId
+    where newTriple s p o = triple <$> s <*> p <*> o
+
+loadRDF :: (Connection c, RDF rdf) => c -> GraphName -> IO rdf
+loadRDF conn graph = do
+  tsql <- runFetchAll conn query ()
+  ts <- sequence $ F.concatMap (\t -> [newTriple t]) tsql
+  return $ mkRdf (catMaybes ts) baseUri pms
+  where query = Query $ TL.pack $ "SELECT * FROM `" ++ (T.unpack graph) ++ "_triples`"
+        newTriple [_, subjId, predId, objId] = loadTripleByIds conn graph subjId predId objId
+        newTriple _ = error "Invalid SQL format for Triple"
+        baseUri = Nothing -- TODO
+        pms = PrefixMappings Map.empty -- TODO
+
+
+-- AUXILIARY
 
 -- TODO: This is actually a connection-specific function,
 -- which must be implemented in its appropriate adapter individually
