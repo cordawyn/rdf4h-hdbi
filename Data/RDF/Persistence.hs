@@ -41,6 +41,12 @@ createStorage conn graph = do
   run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_triples` (id INTEGER PRIMARY KEY NOT NULL, subject_id INTEGER, predicate_id INTEGER, object_id INTEGER)") ()
   run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_nodes` (id INTEGER PRIMARY KEY NOT NULL, type STRING, text STRING, tag STRING)") ()
 
+-- Delete the RDF persistence tables.
+deleteStorage :: Connection c => c -> GraphName -> IO ()
+deleteStorage conn graph = do
+  run conn (Query $ TL.pack $ "DROP TABLE `" ++ (T.unpack graph) ++ "_nodes`") ()
+  run conn (Query $ TL.pack $ "DROP TABLE `" ++ (T.unpack graph) ++ "_triples`") ()
+
 nodeToSqlValues :: Node -> [(T.Text, SqlValue)]
 nodeToSqlValues (UNode uri)    = [("type", SqlText "UNode"), ("text", toSql uri)]
 nodeToSqlValues (BNode nid)    = [("type", SqlText "BNode"), ("text", toSql nid)]
