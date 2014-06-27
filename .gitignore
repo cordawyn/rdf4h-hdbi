@@ -13,3 +13,4 @@ TAGS
 
 /.cabal-sandbox
 cabal.sandbox.config
+/test/test.sqlite
