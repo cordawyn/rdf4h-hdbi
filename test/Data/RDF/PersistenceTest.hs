@@ -71,6 +71,7 @@ storeRDFTest = do
   initStorage conn graph
   isRDFStored <- storeRDF conn graph rdf
   triplesStored <- runFetchAll conn q1 () :: IO (S.Seq [SqlValue])
+  disconnect conn
   return $ testCase "storeRDF test" $ assertion [isRDFStored, (F.concatMap (\x -> [tail x]) triplesStored) == [t1, t2]]
   where graph = "store_rdf_test"
         rdf = mkRdf trps bUrl pms :: TriplesGraph
@@ -82,6 +83,69 @@ storeRDFTest = do
         t2 = [SqlInteger 4, SqlInteger 5, SqlInteger 6]
         q1 = Query $ TL.pack $ "SELECT * FROM " ++ (T.unpack graph) ++ "_triples"
         assertion conds = HU.assert $ all (\x -> x == True) conds
+
+loadNodeTest :: IO Test
+loadNodeTest = do
+  conn <- connectSqlite3 testDatabase
+  initStorage conn graph
+  run conn query ()
+  nid <- lastInsertedRowId conn -- TODO: "lastInsertedRowId" is not supposed to be available from Data.RDF.Persistence, but from "hdbi-*" modules.
+  n <- loadNode conn graph nid
+  disconnect conn
+  case n of
+    Nothing -> return $ testCase "loadNode test" $ HU.assert False
+    Just node -> return $ testCase "loadNode test" $ HU.assert $ node == unode "http://example.org/rdf/1"
+  where graph = "load_node_test"
+        query = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` (type, text) VALUES ('UNode', 'http://example.org/rdf/1')"
+
+loadTripleTest :: IO Test
+loadTripleTest = do
+  conn <- connectSqlite3 testDatabase
+  initStorage conn graph
+  run conn q1 ()
+  id1 <- lastInsertedRowId conn -- TODO: ditto
+  run conn q2 ()
+  id2 <- lastInsertedRowId conn -- TODO: ditto
+  run conn q3 ()
+  id3 <- lastInsertedRowId conn -- TODO: ditto
+  run conn q4 [id1, id2, id3]
+  tid <- lastInsertedRowId conn -- TODO: ditto
+  t <- loadTriple conn graph tid
+  disconnect conn
+  case t of
+    Nothing -> return $ testCase "loadTriple test" $ HU.assert False
+    Just tr -> return $ testCase "loadTriple test" $ HU.assert $ expectedTriple == tr
+      where expectedTriple = triple (unode "http://example.org/rdf/1") (unode "http://example.org/rdf/2") (unode "http://example.org/rdf/3")
+  where graph = "load_triple_test"
+        q1 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` (type, text) VALUES ('UNode', 'http://example.org/rdf/1')"
+        q2 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` (type, text) VALUES ('UNode', 'http://example.org/rdf/2')"
+        q3 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` (type, text) VALUES ('UNode', 'http://example.org/rdf/3')"
+        q4 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_triples` (subject_id, predicate_id, object_id) VALUES (?, ?, ?)"
+
+loadRDFTest :: IO Test
+loadRDFTest = do
+  conn <- connectSqlite3 testDatabase
+  initStorage conn graph
+  run conn q1 ()
+  id1 <- lastInsertedRowId conn -- TODO: ditto
+  run conn q2 ()
+  id2 <- lastInsertedRowId conn -- TODO: ditto
+  run conn q3 ()
+  id3 <- lastInsertedRowId conn -- TODO: ditto
+  run conn q4 [id1, id2, id3]
+  rdf <- loadRDF conn graph :: IO TriplesGraph
+  disconnect conn
+  return $ testCase "loadRDF test" $ HU.assert $ (triplesOf expectedRDF) == (triplesOf rdf)
+  where graph = "load_rdf_test"
+        q1 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` (type, text) VALUES ('UNode', 'http://example.org/rdf/1')"
+        q2 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` (type, text) VALUES ('UNode', 'http://example.org/rdf/2')"
+        q3 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_nodes` (type, text) VALUES ('UNode', 'http://example.org/rdf/3')"
+        q4 = Query $ TL.pack $ "INSERT INTO `" ++ (T.unpack graph) ++ "_triples` (subject_id, predicate_id, object_id) VALUES (?, ?, ?)"
+        expectedRDF = mkRdf ts baseUri pms :: TriplesGraph
+        ts = [ triple (unode "http://example.org/rdf/1") (unode "http://example.org/rdf/2") (unode "http://example.org/rdf/3") ]
+        baseUri = Nothing
+        pms = PrefixMappings Map.empty
+
 
 -- AUXILIARY
 

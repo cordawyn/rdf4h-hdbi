@@ -33,7 +33,7 @@ type GraphName = T.Text
 -- Triples:
 --    id, subject_id, predicate_id, object_id
 -- Nodes:
---    id, type, text
+--    id, type, text, tag
 -- where "type" is one of Nodes: UNode, BNode, LNode
 --
 createStorage :: Connection c => c -> GraphName -> IO ()
