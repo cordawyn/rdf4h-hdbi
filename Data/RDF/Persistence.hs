@@ -59,6 +59,7 @@ nodeToSqlValues (LNode v)      = case v of
                                    PlainLL tx ln -> [("type", SqlText "PlainLL"), ("text", toSql tx), ("tag", toSql ln)]
                                    TypedL tx tp -> [("type", SqlText "TypedL"), ("text", toSql tx), ("tag", toSql tp)]
 
+-- Store an RDF Node in the database.
 storeNode :: Connection c => c -> GraphName -> Node -> IO SqlValue
 storeNode conn graph n = do
   runQuery $ (unzip . nodeToSqlValues) n
@@ -73,6 +74,8 @@ storeNode conn graph n = do
                            (T.intercalate ", " $ replicate (length cols) "?"),
                            ")" ]
 
+-- Store an RDF Triple in the database.
+-- (Stores all dependent nodes as well).
 storeTriple :: Connection c => c -> GraphName -> Triple -> IO SqlValue
 storeTriple conn graph (Triple subj pred obj) = do
   subjId <- storeNode conn graph subj
@@ -82,6 +85,12 @@ storeTriple conn graph (Triple subj pred obj) = do
   lastInsertedRowId conn
   where query = Query $ TL.pack ("INSERT INTO " ++ (T.unpack graph) ++ "_triples (subject_id, predicate_id, object_id) VALUES (?, ?, ?)")
 
+-- Store a whole RDF graph in the database.
+-- Note that due to uniqueness constraints,
+-- the database may not appear to "mirror" your original graph.
+-- FIXME: Make sure that stored triples refer proper node Ids,
+-- if a node duplicate is already present in the database.
+-- TODO: BaseURI and PrefixMappings are not stored.
 storeRDF :: (Connection c, RDF rdf) => c -> GraphName -> rdf -> IO Bool
 storeRDF conn graph rdf = do
   xs <- mapM (storeTriple conn graph) $ triplesOf rdf
@@ -111,6 +120,7 @@ sqlValuesToNode [_, ntype, ntext, ntag] =
       _ -> error $ "Unknown node type in SQL: " ++ (fromSql ntype)
 sqlValuesToNode _ = error "Invalid SQL format for Node"
 
+-- Load Triple from the database by its Id.
 loadTriple :: Connection c => c -> GraphName -> SqlValue -> IO (Maybe Triple)
 loadTriple conn graph tid = do
   tsql <- runFetch conn query [tid]
@@ -120,11 +130,14 @@ loadTriple conn graph tid = do
     Just _ -> error "Invalid SQL format for Triple"
   where query = Query $ TL.pack $ "SELECT * FROM `" ++ (T.unpack graph) ++ "_triples` WHERE id = ? LIMIT 1"
 
+-- Load Triple from the database, given the Ids of its subject, predicate and object nodes.
 loadTripleByIds :: Connection c => c -> GraphName -> SqlValue -> SqlValue -> SqlValue -> IO (Maybe Triple)
 loadTripleByIds conn graph subjId predId objId = do
     newTriple <$> loadNode conn graph subjId <*> loadNode conn graph predId <*> loadNode conn graph objId
     where newTriple s p o = triple <$> s <*> p <*> o
 
+-- Load an RDF graph from the database.
+-- TODO: BaseURI and PrefixMappings are not loaded.
 loadRDF :: (Connection c, RDF rdf) => c -> GraphName -> IO rdf
 loadRDF conn graph = do
   tsql <- runFetchAll conn query ()
