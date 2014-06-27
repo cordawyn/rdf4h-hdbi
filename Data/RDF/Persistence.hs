@@ -3,7 +3,6 @@
 -- TODO:
 -- Wrap all SQL queries into transactions, make sure lastInsertedRowId is valid!
 -- Implement complete RDF->SQL and SQL->RDF serializing.
--- Unique (row/node) constraints?
 -- Maybe use unique constraints to handle cases of *updating* RDF stored in the DB?
 -- Use a flexible method to load nodes or triples instead of looking up them by ID
 --   (e.g. replace SqlValue (ID) with [(columnName, value)] argument)?
@@ -38,8 +37,8 @@ type GraphName = T.Text
 --
 createStorage :: Connection c => c -> GraphName -> IO ()
 createStorage conn graph = do
-  run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_triples` (id INTEGER PRIMARY KEY NOT NULL, subject_id INTEGER, predicate_id INTEGER, object_id INTEGER)") ()
-  run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_nodes` (id INTEGER PRIMARY KEY NOT NULL, type STRING, text STRING, tag STRING)") ()
+  run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_triples` (id INTEGER PRIMARY KEY NOT NULL, subject_id INTEGER, predicate_id INTEGER, object_id INTEGER, UNIQUE(subject_id, predicate_id, object_id))") ()
+  run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_nodes` (id INTEGER PRIMARY KEY NOT NULL, type STRING, text STRING, tag STRING, UNIQUE(type, text, tag))") ()
 
 -- Delete the RDF persistence tables.
 deleteStorage :: Connection c => c -> GraphName -> IO ()
