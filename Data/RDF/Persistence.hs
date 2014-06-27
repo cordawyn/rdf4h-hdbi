@@ -2,12 +2,16 @@
 
 -- TODO:
 -- Wrap all SQL queries into transactions, make sure lastInsertedRowId is valid!
--- Implement complete RDF->SQL and SQL->RDF serializing.
--- Maybe use unique constraints to handle cases of *updating* RDF stored in the DB?
+-- Implement UPDATING of the graph data in SQL,
+--   where deleted nodes and triples are removed and new nodes and triples are added.
 -- Use a flexible method to load nodes or triples instead of looking up them by ID
 --   (e.g. replace SqlValue (ID) with [(columnName, value)] argument)?
 
-module Data.RDF.Persistence where
+module Data.RDF.Persistence (
+  createStorage, deleteStorage,
+  storeNode, storeTriple, storeRDF,
+  loadNode, loadTriple, loadTripleByIds, loadRDF
+) where
 
 import Data.RDF
 import Database.HDBI
@@ -37,14 +41,14 @@ type GraphName = T.Text
 --
 createStorage :: Connection c => c -> GraphName -> IO ()
 createStorage conn graph = do
-  run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_triples` (id INTEGER PRIMARY KEY NOT NULL, subject_id INTEGER, predicate_id INTEGER, object_id INTEGER, UNIQUE(subject_id, predicate_id, object_id))") ()
-  run conn (Query $ TL.pack $ "CREATE TABLE `" ++ (T.unpack graph) ++ "_nodes` (id INTEGER PRIMARY KEY NOT NULL, type STRING, text STRING, tag STRING, UNIQUE(type, text, tag))") ()
+  run conn (Query $ TL.pack $ "CREATE TABLE IF NOT EXISTS `" ++ (T.unpack graph) ++ "_triples` (id INTEGER PRIMARY KEY NOT NULL, subject_id INTEGER, predicate_id INTEGER, object_id INTEGER, UNIQUE(subject_id, predicate_id, object_id))") ()
+  run conn (Query $ TL.pack $ "CREATE TABLE IF NOT EXISTS `" ++ (T.unpack graph) ++ "_nodes` (id INTEGER PRIMARY KEY NOT NULL, type STRING, text STRING, tag STRING, UNIQUE(type, text, tag))") ()
 
 -- Delete the RDF persistence tables.
 deleteStorage :: Connection c => c -> GraphName -> IO ()
 deleteStorage conn graph = do
-  run conn (Query $ TL.pack $ "DROP TABLE `" ++ (T.unpack graph) ++ "_nodes`") ()
-  run conn (Query $ TL.pack $ "DROP TABLE `" ++ (T.unpack graph) ++ "_triples`") ()
+  run conn (Query $ TL.pack $ "DROP TABLE IF EXISTS `" ++ (T.unpack graph) ++ "_nodes`") ()
+  run conn (Query $ TL.pack $ "DROP TABLE IF EXISTS `" ++ (T.unpack graph) ++ "_triples`") ()
 
 nodeToSqlValues :: Node -> [(T.Text, SqlValue)]
 nodeToSqlValues (UNode uri)    = [("type", SqlText "UNode"), ("text", toSql uri)]

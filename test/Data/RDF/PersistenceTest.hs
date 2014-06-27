@@ -149,14 +149,16 @@ loadRDFTest = do
 
 -- AUXILIARY
 
-initStorage :: Connection c => c -> GraphName -> IO ()
+initStorage :: Connection c => c -> T.Text -> IO ()
 initStorage conn graph = do
-  clearStorage conn graph
+  deleteStorage conn graph
   createStorage conn graph
 
-clearStorage :: Connection c => c -> GraphName -> IO ()
-clearStorage conn graph = do
-  run conn q1 ()
-  run conn q2 ()
-  where q1 = Query $ TL.pack $ "DROP TABLE IF EXISTS " ++ (T.unpack graph) ++ "_nodes"
-        q2 = Query $ TL.pack $ "DROP TABLE IF EXISTS " ++ (T.unpack graph) ++ "_triples"
+-- NB: Copied from Persistence.hs, read comments there.
+lastInsertedRowId :: Connection c => c -> IO SqlValue
+lastInsertedRowId conn = do
+  r <- runFetch conn query ()
+  case r of
+      Nothing -> return $ SqlInteger 0
+      Just i  -> return i
+  where query = Query $ TL.pack "select last_insert_rowid()"
