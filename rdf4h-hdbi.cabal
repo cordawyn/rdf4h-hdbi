@@ -4,8 +4,10 @@
 name:                rdf4h-hdbi
 version:             0.1.0.0
 synopsis:            DB persistence module for RDF4H, using HDBI.
--- description:         
-homepage:            github
+description:         RDF4H-HDBI allows you to store your RDF graphs into,
+                     or load them from the database backed by HDBI modules
+                     (SQlite, PostgreSQL, etc.)
+homepage:            https://github.com/cordawyn/rdf4h-hdbi
 license:             BSD3
 license-file:        LICENSE
 author:              Slava Kravchenko
@@ -15,6 +17,10 @@ category:            Database
 build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
+
+source-repository    head
+  type:              git
+  location:          git@github.com:cordawyn/rdf4h-hdbi.git
 
 library
   exposed-modules:     Data.RDF.Persistence
