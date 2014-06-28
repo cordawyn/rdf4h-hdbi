@@ -1,10 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- TODO:
--- Wrap all SQL queries into transactions, make sure lastInsertedRowId is valid!
--- Implement UPDATING of the graph data in SQL,
+-- TODO: Wrap all SQL queries into transactions, make sure lastInsertedRowId is valid!
+-- TODO: Implement UPDATING of the graph data in SQL,
 --   where deleted nodes and triples are removed and new nodes and triples are added.
--- Use a flexible method to load nodes or triples instead of looking up them by ID
+-- TODO: Use a flexible method to load nodes or triples instead of looking up them by ID
 --   (e.g. replace SqlValue (ID) with [(columnName, value)] argument)?
 
 module Data.RDF.Persistence (
@@ -16,11 +15,11 @@ module Data.RDF.Persistence (
 import Data.RDF
 import Database.HDBI
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy as TL (pack)
 import qualified Data.Foldable as F (concatMap)
 import Data.Functor ((<$>))
-import Control.Applicative ((<*>), optional)
-import qualified Data.Map as Map
+import Control.Applicative ((<*>))
+import qualified Data.Map as Map (empty)
 import Data.Maybe (catMaybes)
 
 type GraphName = T.Text
