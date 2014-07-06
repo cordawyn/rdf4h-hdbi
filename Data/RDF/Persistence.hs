@@ -1,11 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- TODO: Wrap all SQL queries into transactions, make sure lastInsertedRowId is valid!
--- TODO: Implement UPDATING of the graph data in SQL,
---   where deleted nodes and triples are removed and new nodes and triples are added.
--- TODO: Use a flexible method to load nodes or triples instead of looking up them by ID
---   (e.g. replace SqlValue (ID) with [(columnName, value)] argument)?
-
 module Data.RDF.Persistence (
   createStorage, deleteStorage,
   storeNode, storeTriple, storeRDF,
@@ -37,7 +31,6 @@ type GraphName = T.Text
 -- Nodes:
 --    id, type, text, tag
 -- where "type" is one of Nodes: UNode, BNode, LNode
---
 createStorage :: Connection c => c -> GraphName -> IO ()
 createStorage conn graph = do
   run conn (Query $ TL.pack $ "CREATE TABLE IF NOT EXISTS `" ++ (T.unpack graph) ++ "_triples` (id INTEGER PRIMARY KEY NOT NULL, subject_id INTEGER, predicate_id INTEGER, object_id INTEGER, UNIQUE(subject_id, predicate_id, object_id))") ()
@@ -60,7 +53,7 @@ nodeToSqlValues (LNode v)      = case v of
 
 -- Store an RDF Node in the database.
 storeNode :: Connection c => c -> GraphName -> Node -> IO SqlValue
-storeNode conn graph n = do
+storeNode conn graph n = withTransaction conn $ do
   runQuery $ (unzip . nodeToSqlValues) n
   lastInsertedRowId conn
   where runQuery (cols, vals) = run conn query vals
@@ -75,20 +68,21 @@ storeNode conn graph n = do
 
 -- Store an RDF Triple in the database.
 -- (Stores all dependent nodes as well).
+-- FIXME: Make sure that stored triples refer proper node Ids,
+-- if a node duplicate is already present in the database.
 storeTriple :: Connection c => c -> GraphName -> Triple -> IO SqlValue
 storeTriple conn graph (Triple subj pred obj) = do
   subjId <- storeNode conn graph subj
   predId <- storeNode conn graph pred
   objId  <- storeNode conn graph obj
-  run conn query [subjId, predId, objId]
-  lastInsertedRowId conn
-  where query = Query $ TL.pack ("INSERT INTO " ++ (T.unpack graph) ++ "_triples (subject_id, predicate_id, object_id) VALUES (?, ?, ?)")
+  withTransaction conn $ do
+    run conn query [subjId, predId, objId]
+    lastInsertedRowId conn
+    where query = Query $ TL.pack ("INSERT INTO " ++ (T.unpack graph) ++ "_triples (subject_id, predicate_id, object_id) VALUES (?, ?, ?)")
 
 -- Store a whole RDF graph in the database.
 -- Note that due to uniqueness constraints,
 -- the database may not appear to "mirror" your original graph.
--- FIXME: Make sure that stored triples refer proper node Ids,
--- if a node duplicate is already present in the database.
 -- TODO: BaseURI and PrefixMappings are not stored.
 storeRDF :: (Connection c, RDF rdf) => c -> GraphName -> rdf -> IO Bool
 storeRDF conn graph rdf = do
