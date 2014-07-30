@@ -1,6 +1,6 @@
 # RDF4H-HDBI
 
-This is an HDBI backend for RDF4H.
+This is an [HDBI](https://github.com/s9gf4ult/hdbi) backend for [RDF4H](https://github.com/robstewart57/rdf4h).
 
 Currently, it is intended as a method to store/load a whole graph (or its parts, at your own risk),
 and does not work properly with *updating* the data. This means that once you load a graph
@@ -16,7 +16,7 @@ storing the graph.
 Before doing anything, you may need to prepare the database using `createStorage`.
 
 To start working with the backend, you are expected to supply a connection instance to it.
-You have to import the requird module of HDBI, e.g. hdbi-sqlite to connect to your kind of database.
+You have to import the required module of HDBI, e.g. hdbi-sqlite to connect to your kind of database.
 
     import Database.HDBI.Sqlite
     import Data.RDF.Persistence
@@ -37,6 +37,7 @@ You have to import the requird module of HDBI, e.g. hdbi-sqlite to connect to yo
 If you no longer need the graph tables in the database, you can delete them
 using `deleteStorage`.
 
+Note that all the database updates are already wrapped in transactions.
 
 ## Authors and Contributors
 
